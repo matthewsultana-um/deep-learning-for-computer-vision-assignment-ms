@@ -1,0 +1,10 @@
+000000000196.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000164.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000315.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000257.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000110.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000149.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000643.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000540.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000294.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation
+000000000113.jpg|COCO scene — multiple overlapping detections ideal for NMS visualisation

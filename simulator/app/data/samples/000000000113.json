@@ -1,0 +1,278 @@
+{
+  "images": [
+    {
+      "id": 10,
+      "file_name": "000000000113.jpg",
+      "width": 416,
+      "height": 640
+    }
+  ],
+  "annotations": [
+    {
+      "id": 260,
+      "image_id": 10,
+      "category_id": 57,
+      "bbox": [
+        92.04,
+        381.22,
+        156.77,
+        63.28
+      ],
+      "area": 9920.41,
+      "iscrowd": 0
+    },
+    {
+      "id": 261,
+      "image_id": 10,
+      "category_id": 57,
+      "bbox": [
+        11.03,
+        577.54,
+        71.81,
+        61.94
+      ],
+      "area": 4447.91,
+      "iscrowd": 0
+    },
+    {
+      "id": 262,
+      "image_id": 10,
+      "category_id": 1,
+      "bbox": [
+        4.33,
+        31.42,
+        151.7,
+        455.08
+      ],
+      "area": 69035.64,
+      "iscrowd": 0
+    },
+    {
+      "id": 263,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        70.27,
+        458.25,
+        51.6,
+        61.13
+      ],
+      "area": 3154.31,
+      "iscrowd": 0
+    },
+    {
+      "id": 264,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        347.22,
+        159.86,
+        21.68,
+        18.76
+      ],
+      "area": 406.72,
+      "iscrowd": 0
+    },
+    {
+      "id": 265,
+      "image_id": 10,
+      "category_id": 44,
+      "bbox": [
+        253.79,
+        363.24,
+        47.21,
+        87.04
+      ],
+      "area": 4109.16,
+      "iscrowd": 0
+    },
+    {
+      "id": 266,
+      "image_id": 10,
+      "category_id": 56,
+      "bbox": [
+        142.38,
+        424.27,
+        260.32,
+        149.57
+      ],
+      "area": 38936.06,
+      "iscrowd": 0
+    },
+    {
+      "id": 267,
+      "image_id": 10,
+      "category_id": 1,
+      "bbox": [
+        341.39,
+        100.49,
+        74.61,
+        328.25
+      ],
+      "area": 24490.73,
+      "iscrowd": 0
+    },
+    {
+      "id": 268,
+      "image_id": 10,
+      "category_id": 61,
+      "bbox": [
+        19.38,
+        392.94,
+        396.62,
+        247.06
+      ],
+      "area": 97988.94,
+      "iscrowd": 0
+    },
+    {
+      "id": 269,
+      "image_id": 10,
+      "category_id": 1,
+      "bbox": [
+        148.13,
+        44.58,
+        195.6,
+        386.88
+      ],
+      "area": 75673.73,
+      "iscrowd": 0
+    },
+    {
+      "id": 270,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        282.56,
+        95.35,
+        25.51,
+        26.77
+      ],
+      "area": 682.9,
+      "iscrowd": 0
+    },
+    {
+      "id": 271,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        346.5,
+        67.93,
+        23.44,
+        22.05
+      ],
+      "area": 516.85,
+      "iscrowd": 0
+    },
+    {
+      "id": 272,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        343.43,
+        98.09,
+        24.1,
+        25.0
+      ],
+      "area": 602.5,
+      "iscrowd": 0
+    },
+    {
+      "id": 273,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        379.91,
+        96.72,
+        17.64,
+        23.3
+      ],
+      "area": 411.01,
+      "iscrowd": 0
+    },
+    {
+      "id": 274,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        195.73,
+        140.4,
+        20.06,
+        21.64
+      ],
+      "area": 434.1,
+      "iscrowd": 0
+    },
+    {
+      "id": 275,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        176.16,
+        137.14,
+        23.57,
+        24.81
+      ],
+      "area": 584.77,
+      "iscrowd": 0
+    },
+    {
+      "id": 276,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        174.85,
+        106.92,
+        19.61,
+        25.63
+      ],
+      "area": 502.6,
+      "iscrowd": 0
+    },
+    {
+      "id": 277,
+      "image_id": 10,
+      "category_id": 42,
+      "bbox": [
+        140.57,
+        138.28,
+        18.76,
+        22.27
+      ],
+      "area": 417.79,
+      "iscrowd": 0
+    }
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "name": "person",
+      "supercategory": "object"
+    },
+    {
+      "id": 42,
+      "name": "cup",
+      "supercategory": "object"
+    },
+    {
+      "id": 44,
+      "name": "knife",
+      "supercategory": "object"
+    },
+    {
+      "id": 56,
+      "name": "cake",
+      "supercategory": "object"
+    },
+    {
+      "id": 57,
+      "name": "chair",
+      "supercategory": "object"
+    },
+    {
+      "id": 61,
+      "name": "dining table",
+      "supercategory": "object"
+    }
+  ]
+}

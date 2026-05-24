@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visual Explorer Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/main.css?v=18" />
+  <!-- Alpine.js (bundled, no CDN call) — defer keeps DOM ready -->
+  <script defer src="/static/js/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<!-- ── Page header ──────────────────────────────────────────────────────── -->
+<header id="page-header">
+  <h1>Visual Explorer Simulator</h1>
+  <span style="margin-left:auto;font-size:10px;color:#a5b4fc;font-weight:600;letter-spacing:.06em;">NMS · AP · mAP</span>
+</header>
+
+<!-- ── Three-column layout ──────────────────────────────────────────────── -->
+<div id="app-layout">
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       COLUMN 1 — ConfiguratorPanel
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <section id="configurator-panel" class="panel" x-data="configurator()"
+           :class="{collapsed: collapsed}">
+
+    <header class="panel-header" id="configurator-header">
+      <!-- Thumbnail visible only when collapsed -->
+      <img x-show="collapsed && loadedImageSrc"
+           id="loaded-image-thumbnail"
+           :src="loadedImageSrc || ''"
+           style="width:32px;height:24px;object-fit:cover;border-radius:3px;flex-shrink:0;" />
+      <h2 x-show="!collapsed">Configuration</h2>
+      <button class="btn btn-icon" id="configurator-collapse-btn"
+              @click="collapsed = !collapsed"
+              :title="collapsed ? 'Expand panel' : 'Collapse panel'"
+              :style="collapsed ? 'margin:0;' : 'margin-left:auto;flex-shrink:0;'">
+        <span x-text="collapsed ? '▶' : '◀'"></span>
+      </button>
+    </header>
+
+    <div class="panel-body" x-show="!collapsed"
+         x-transition:enter="cfg-enter" x-transition:enter-start="cfg-enter-start" x-transition:enter-end="cfg-enter-end"
+         x-transition:leave="cfg-leave" x-transition:leave-start="cfg-leave-start" x-transition:leave-end="cfg-leave-end">
+
+      <!-- Image preview strip (Sample) -->
+      <div id="image-preview-strip">
+        <template x-for="tile in previewTiles" :key="tile.id">
+          <div class="image-preview-tile"
+               :class="{active: tile.id === selectedImageId}"
+               @click="selectImage(tile)">
+            <img :src="tile.url" :alt="tile.filename" loading="lazy" />
+          </div>
+        </template>
+        <template x-if="previewTiles.length === 0">
+          <span class="list-empty">No images found.</span>
+        </template>
+      </div>
+
+      <!-- Loaded image display -->
+      <div id="loaded-image-wrap">
+        <div id="loaded-image-placeholder" x-show="!loadedImageSrc && !detecting">
+          Select an image to begin.
+        </div>
+        <!-- Loading state with progress bar -->
+        <div x-show="detecting"
+             style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 20px;width:100%;">
+          <span style="font-size:12px;color:#94a3b8;font-weight:500;" x-text="detectingMsg"></span>
+          <div style="width:100%;max-width:220px;height:6px;background:#1e293b;border-radius:3px;overflow:hidden;">
+            <div :style="`width:${detectProgress}%;height:100%;background:var(--clr-accent);border-radius:3px;transition:width 0.15s ease-out;`"></div>
+          </div>
+          <span style="font-size:11px;color:#64748b;" x-text="detectProgress + '%'"></span>
+        </div>
+        <canvas id="loaded-image-canvas" x-show="loadedImageSrc && !detecting"
+                style="max-width:100%;max-height:260px;display:block;"></canvas>
+      </div>
+      <!-- Detection error -->
+      <div class="inline-error" x-show="detectionError" x-text="detectionError"></div>
+
+      <!-- Detection algorithm label -->
+      <div id="detection-algorithm-label">Detection Algorithm: YOLO (YOLOv8n)</div>
+
+      <!-- Ground truth overlay -->
+      <div x-show="loadedImageSrc" style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--clr-keep);">
+            ✔ Ground Truth Labels
+          </span>
+          <span style="font-size:10px;color:var(--clr-text-muted);"
+                x-text="gtBoxes.length ? gtBoxes.length+' boxes' : 'no labels'"></span>
+        </div>
+        <div style="position:relative;background:#0a1628;border-radius:var(--radius);overflow:hidden;border:1.5px solid var(--clr-keep);box-shadow:0 0 0 1px rgba(16,185,129,.15);">
+          <canvas id="gt-image-canvas" style="max-width:100%;display:block;"></canvas>
+          <div x-show="!gtBoxes.length"
+               style="padding:20px;text-align:center;font-size:11px;color:var(--clr-text-muted);font-style:italic;">
+            No labels available for this image.
+          </div>
+        </div>
+
+        <!-- GT box list -->
+        <div x-show="gtBoxes.length > 0"
+             class="box-list"
+             style="max-height:160px;overflow-y:auto;border:1.5px solid var(--clr-keep);border-radius:var(--radius);margin-top:4px;">
+          <div class="box-list-header"
+               style="display:grid;grid-template-columns:44px 1fr auto auto;gap:6px;color:var(--clr-keep);background:rgba(22,163,74,0.08);padding:6px 8px;">
+            <span>Label</span><span>Class</span><span>IoU</span><span></span>
+          </div>
+          <template x-for="(box, i) in gtBoxes" :key="box.id">
+            <div class="box-list-item"
+                 style="display:grid;grid-template-columns:44px 1fr auto auto;gap:6px;align-items:center;padding:5px 8px;">
+              <span style="font-size:9px;font-weight:800;font-family:var(--font-mono);
+                           color:var(--clr-keep);background:rgba(22,163,74,0.12);
+                           padding:2px 5px;border-radius:3px;text-align:center;white-space:nowrap;"
+                    x-text="'GT'+(i+1)"></span>
+              <span class="box-class" x-text="box.class_name" :title="box.class_name"></span>
+              <span style="font-size:10px;font-variant-numeric:tabular-nums;font-weight:600;"
+                    :style="gtMatchById[box.id] ? (gtMatchById[box.id].matched ? 'color:var(--clr-keep)' : 'color:var(--clr-suppress)') : 'color:var(--clr-text-muted)'"
+                    x-text="gtMatchById[box.id] ? (gtMatchById[box.id].best_iou*100).toFixed(0)+'%' : '—'"></span>
+              <span x-show="gtMatchById[box.id]"
+                    style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:3px;white-space:nowrap;"
+                    :style="gtMatchById[box.id]?.matched
+                      ? 'background:rgba(22,163,74,0.15);color:var(--clr-keep)'
+                      : 'background:rgba(220,38,38,0.12);color:var(--clr-suppress)'"
+                    x-text="gtMatchById[box.id] ? (gtMatchById[box.id].matched ? 'TP' : 'FP') : ''"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+    </div><!-- /panel-body -->
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       COLUMN 2 — NMSPanel
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <section id="nms-panel" class="panel" x-data="nmsPanel()">
+
+    <header class="panel-header" id="nms-header">
+      <h2>Non-Maximum Suppression</h2>
+      <span id="step-counter" x-show="steps.length > 0"
+            x-text="currentStep === -1
+              ? currentCandidateBoxes.length + ' detections · Press ▶ to apply filter'
+              : 'Step: ' + (currentStep + 1) + ' / ' + steps.length"></span>
+    </header>
+
+    <div class="panel-body" style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:8px;">
+
+      <!-- Controls + explanation: left column holds algorithm + sliders; right panel spans full height -->
+      <div id="param-controls-row">
+        <div id="param-controls-left">
+          <!-- Algorithm selector -->
+          <div id="algorithm-selector">
+            <label style="font-size:11px;font-weight:600;color:var(--clr-text-muted);">Algorithm:</label>
+            <template x-for="algo in ['NMS','Soft-NMS']" :key="algo">
+              <button class="btn"
+                      :class="{active: algorithm === algo}"
+                      @click="setAlgorithm(algo)"
+                      x-text="algo"></button>
+            </template>
+          </div>
+
+          <!-- Parameter controls -->
+          <div id="parameter-controls">
+            <div class="param-group">
+              <label><span x-text="algorithm === 'Soft-NMS' ? 'Initial Confidence' : 'Confidence'"></span> <span class="param-value" x-text="confThreshold.toFixed(2)"></span></label>
+              <input type="range" min="0" max="1" step="0.01"
+                     :value="confThreshold"
+                     @input="setConfThreshold(+$event.target.value)" />
+            </div>
+            <template x-if="algorithm !== 'Soft-NMS'">
+              <div class="param-group">
+                <label>IoU <span class="param-value" x-text="iouThreshold.toFixed(2)"></span></label>
+                <input type="range" min="0" max="1" step="0.01"
+                       :value="iouThreshold"
+                       @input="setIouThreshold(+$event.target.value)" />
+              </div>
+            </template>
+            <template x-if="algorithm === 'Soft-NMS'">
+              <div class="param-group">
+                <label>Min conf after decay <span class="param-value" x-text="minScore.toFixed(2)"></span></label>
+                <input type="range" min="0.01" max="0.5" step="0.01"
+                       :value="minScore"
+                       @input="setMinScore(+$event.target.value)" />
+              </div>
+            </template>
+            <template x-if="algorithm === 'Soft-NMS'">
+              <div class="param-group">
+                <label>Method:</label>
+                <div style="display:flex;gap:6px;">
+                  <template x-for="m in ['Linear','Gaussian']" :key="m">
+                    <button class="btn" :class="{active: softNmsMethod === m}"
+                            @click="setSoftNmsMethod(m)" x-text="m" style="padding:3px 8px;"></button>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <template x-if="algorithm === 'Soft-NMS' && softNmsMethod === 'Gaussian'">
+              <div class="param-group">
+                <label>Sigma <span class="param-value" x-text="sigma.toFixed(2)"></span></label>
+                <input type="range" min="0.1" max="1" step="0.05"
+                       :value="sigma"
+                       @input="setSigma(+$event.target.value)" />
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Explanation panel — spans full height of algorithm + sliders rows -->
+        <div id="param-explain-strip" x-show="paramInfo" x-cloak>
+          <span class="param-explain-badge" x-text="paramInfo ? paramInfo.badge : ''"></span>
+          <div class="param-explain-body">
+            <span class="param-explain-name" x-text="paramInfo ? paramInfo.name : ''"></span>
+            <span x-show="paramInfo && paramInfo.value != null"
+                  class="param-value" x-text="paramInfo ? paramInfo.value : ''"></span>
+            <span class="param-explain-text" x-text="paramInfo ? paramInfo.text : ''"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inline warnings -->
+      <template x-if="nmsWarning">
+        <div class="inline-warning" x-text="nmsWarning"></div>
+      </template>
+
+      <!-- NMS work area -->
+      <div id="nms-work-area">
+
+        <div class="nms-grid-single">
+            <!-- Step image view -->
+            <div class="work-column">
+              <h3>Image</h3>
+              <div id="step-image-view">
+                <canvas id="step-canvas"></canvas>
+              </div>
+            </div>
+            <!-- Candidates (neutral) -->
+            <div class="work-column">
+
+              <!-- Step-0 callout -->
+              <div class="step0-callout" x-show="currentStep === 0 && lowConfidenceBoxes.length > 0">
+                <span class="step0-badge">STEP 0</span>
+                <strong>Confidence pre-filter applied.</strong><br>
+                <span x-text="lowConfidenceBoxes.length"></span> box(es) with conf &lt; <strong x-text="confThreshold.toFixed(2)"></strong> removed before NMS — see <strong>Discarded</strong> ↓
+              </div>
+
+              <h3>Candidates <span class="list-count" x-text="currentCandidateBoxes.length ? '('+currentCandidateBoxes.length+')' : ''"></span></h3>
+              <div class="box-list nms-candidates-list"
+                   :class="currentStep === 0 && steps.length > 0 ? 'candidates-step0' : ''">
+                <div class="box-list-header" x-show="currentStep === -1 && steps.length > 0"
+                     style="background:rgba(37,99,235,0.12);color:#60a5fa;border-color:rgba(37,99,235,0.3);">
+                  All detections · Press ▶ to apply confidence filter
+                </div>
+                <div class="box-list-header" x-show="steps.length === 0 || currentStep === 0">
+                  Active · conf ≥ <span x-text="confThreshold.toFixed(2)"></span>
+                </div>
+                <div class="box-list-header nms-pivot-header" x-show="steps.length > 0 && currentStep > 0"
+                     x-text="algorithm === 'Soft-NMS'
+                       ? 'Soft-NMS decay vs pivot #' + (steps[currentStep] && steps[currentStep].pivot_box_id)
+                       : 'IoU vs pivot #' + (steps[currentStep] && steps[currentStep].pivot_box_id) + ' — threshold ' + iouThreshold.toFixed(2)">
+                </div>
+                <template x-for="box in currentCandidateBoxes" :key="box.id">
+                  <div class="box-list-item" @click="highlightBox(box.id)"
+                       :class="{highlighted: highlightedBoxIds.includes(box.id)}">
+                    <span class="box-id" x-text="'#'+box.id"></span>
+                    <span class="box-class" x-text="box.class_name" :title="box.class_name"></span>
+                    <div class="box-meta">
+                      <span class="box-conf" x-text="box.confidence.toFixed(2)"></span>
+                      <span x-show="pivotClassName() !== null && box.class_name === pivotClassName()"
+                            style="font-size:10px;font-variant-numeric:tabular-nums;font-weight:700;"
+                            :style="algorithm !== 'Soft-NMS' && box.iou >= iouThreshold ? 'color:var(--red)' : 'color:#41A864'"
+                            x-text="box.iou != null ? 'IoU '+(box.iou*100).toFixed(0)+'%' : 'IoU 0%'">
+                      </span>
+                    </div>
+                  </div>
+                </template>
+                <div class="list-empty" x-show="currentCandidateBoxes.length === 0">—</div>
+              </div>
+
+              <!-- ── DISCARDED group — two columns ────────────────────── -->
+              <div class="discarded-group">
+
+                <!-- Shared header -->
+                <div class="discarded-group-header">
+                  <span class="discarded-badge">✕ Discarded</span>
+                  <span class="list-count" x-text="(suppressedBoxes.length + lowConfidenceBoxes.length) + ' boxes'"></span>
+                </div>
+
+                <!-- Two-column body -->
+                <div class="discarded-cols">
+
+                  <!-- Left: Suppressed by IoU -->
+                  <div class="discarded-col">
+                    <div class="discarded-sub-header">
+                      <span x-text="algorithm === 'Soft-NMS' ? 'conf < ' + minScore.toFixed(3) : 'IoU ≥ thr.'"></span>
+                      <span class="list-count" x-text="'('+suppressedBoxes.length+')'"></span>
+                    </div>
+                    <div class="box-list discarded-list" id="suppressed-list">
+                      <template x-for="box in suppressedBoxes" :key="box.id">
+                        <div class="box-list-item discarded-item" @click="highlightBox(box.id)"
+                             :class="{highlighted: highlightedBoxIds.includes(box.id)}">
+                          <span class="box-id discarded-id" x-text="'#'+box.id"></span>
+                          <span class="box-class" x-text="box.class_name" :title="box.class_name"></span>
+                          <span class="box-conf" x-text="box.confidence.toFixed(2)"></span>
+                        </div>
+                      </template>
+                      <div class="list-empty" x-show="suppressedBoxes.length === 0"
+                           style="color:var(--red);opacity:.55;font-size:10px;">none yet</div>
+                    </div>
+                  </div>
+
+                  <!-- Divider -->
+                  <div class="discarded-divider"></div>
+
+                  <!-- Right: Low confidence -->
+                  <div class="discarded-col">
+                    <div class="discarded-sub-header"
+                         :class="currentStep === 0 && lowConfidenceBoxes.length > 0 ? 'low-conf-highlight' : ''">
+                      conf &lt; <span x-text="confThreshold.toFixed(2)"></span>
+                      <span class="list-count" x-text="'('+lowConfidenceBoxes.length+')'"></span>
+                    </div>
+                    <div class="box-list discarded-list" id="low-confidence-list">
+                      <template x-for="box in lowConfidenceBoxes" :key="box.id">
+                        <div class="box-list-item discarded-item" @click="highlightBox(box.id)"
+                             :class="{highlighted: highlightedBoxIds.includes(box.id)}">
+                          <span class="box-id discarded-id" x-text="'#'+box.id"></span>
+                          <span class="box-class" x-text="box.class_name" :title="box.class_name"></span>
+                          <span class="box-conf" x-text="box.confidence.toFixed(2)"></span>
+                        </div>
+                      </template>
+                      <div class="list-empty" x-show="lowConfidenceBoxes.length === 0"
+                           style="color:var(--red);opacity:.55;font-size:10px;">—</div>
+                    </div>
+                  </div>
+
+                </div><!-- /discarded-cols -->
+              </div>
+
+            </div>
+
+            <!-- ── KEPT (green) ─────────────────────────────────────────── -->
+            <div class="work-column">
+              <h3>Kept <span class="list-count" x-text="keptBoxes.length ? '('+keptBoxes.length+')' : ''"></span></h3>
+              <div class="box-list kept-list" id="keep-list">
+                <div class="box-list-header kept-header">
+                  ✓ Selected by NMS
+                </div>
+                <template x-for="box in keptBoxes" :key="box.id">
+                  <div class="box-list-item kept-item" @click="highlightBox(box.id)"
+                       :class="{highlighted: highlightedBoxIds.includes(box.id)}">
+                    <span class="box-id kept-id" x-text="'#'+box.id"></span>
+                    <span class="box-class" x-text="box.class_name" :title="box.class_name"></span>
+                    <div class="box-meta">
+                      <span class="box-conf" x-text="box.confidence.toFixed(2)"></span>
+                    </div>
+                  </div>
+                </template>
+                <div class="list-empty" x-show="keptBoxes.length === 0" style="color:#41A864;opacity:.7;">Nothing kept yet.<br/>Press ▶ to start.</div>
+              </div>
+            </div>
+            <!-- Comment log -->
+            <div class="work-column">
+              <h3>Log</h3>
+
+              <div id="comment-log">
+
+                <!-- Pre-filter info card — visible at step -1 once data is loaded -->
+                <div class="log-card active" x-show="currentStep === -1 && steps.length > 0"
+                     style="background:rgba(37,99,235,0.08);border-color:rgba(37,99,235,0.3);">
+                  <div class="log-card-header log-init">
+                    <span class="log-step-badge" style="background:var(--clr-candidate);">PRE</span>
+                    <span>All <strong x-text="currentCandidateBoxes.length"></strong> YOLO detections loaded</span>
+                  </div>
+                  <div style="font-size:11px;color:var(--clr-text-muted);padding:6px 8px;line-height:1.6;">
+                    Press <strong>▶</strong> to apply the confidence threshold
+                    (<strong x-text="confThreshold.toFixed(2)"></strong>).
+                    Boxes below the threshold will move to <strong style="color:var(--red);">Discarded</strong>.
+                  </div>
+                </div>
+
+                <!-- Single reactive card — reads commentLog[currentStep] directly -->
+                <div class="log-card active" x-show="commentLog.length > 0 && currentStep >= 0 && commentLog[currentStep]">
+
+                  <!-- START card (step 0) -->
+                  <div x-show="commentLog[currentStep] && commentLog[currentStep].step_index === 0">
+                    <div class="log-card-header log-init">
+                      <span class="log-step-badge">START</span>
+                      <span x-text="commentLog[currentStep] ? commentLog[currentStep].comment : ''"></span>
+                    </div>
+                  </div>
+
+                  <!-- Pivot card (step > 0) -->
+                  <div x-show="commentLog[currentStep] && commentLog[currentStep].step_index > 0">
+                    <!-- Header -->
+                    <div class="log-card-header log-pivot">
+                      <span class="log-step-badge"
+                            x-text="commentLog[currentStep] ? 'S'+commentLog[currentStep].step_index : ''"></span>
+                      <span class="log-pivot-label">Pivot</span>
+                      <span class="log-box-id"
+                            x-text="commentLog[currentStep] ? '#'+commentLog[currentStep].pivot_box_id : ''"></span>
+                      <span class="log-pivot-conf" style="margin-left:auto;"
+                            x-show="algorithm !== 'Soft-NMS'"
+                            x-text="commentLog[currentStep] && commentLog[currentStep].iou_threshold != null
+                              ? 'threshold '+commentLog[currentStep].iou_threshold.toFixed(2) : ''"></span>
+                    </div>
+
+                    <!-- Pivot box details — inset card -->
+                    <template x-if="pivotBox()">
+                      <div class="pivot-box-inset">
+                        <div class="pivot-box-inset-header">
+                          <span class="pivot-box-inset-title">Bounding Box</span>
+                          <span class="pivot-box-inset-class" x-text="pivotBox().class_name"></span>
+                          <span class="pivot-box-inset-conf" x-text="'conf ' + pivotBox().confidence.toFixed(3)"></span>
+                        </div>
+                        <div class="pivot-box-inset-grid">
+                          <div class="pbi-cell"><span class="pbi-key">X</span><span class="pbi-val" x-text="pivotBox().bbox[0].toFixed(1)"></span></div>
+                          <div class="pbi-cell"><span class="pbi-key">Y</span><span class="pbi-val" x-text="pivotBox().bbox[1].toFixed(1)"></span></div>
+                          <div class="pbi-cell"><span class="pbi-key">W</span><span class="pbi-val" x-text="pivotBox().bbox[2].toFixed(1)"></span></div>
+                          <div class="pbi-cell"><span class="pbi-key">H</span><span class="pbi-val" x-text="pivotBox().bbox[3].toFixed(1)"></span></div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <!-- Summary -->
+                    <div class="log-summary-row" x-show="commentLog[currentStep]">
+                      <span class="log-summary-action">Calculating IoU with
+                        <strong x-text="commentLog[currentStep] ? commentLog[currentStep].compared_box_ids.length : 0"></strong>
+                        candidate(s)
+                      </span>
+                      <span class="log-suppress-count"
+                            x-show="commentLog[currentStep] && commentLog[currentStep].suppressed_box_ids.length > 0"
+                            x-text="commentLog[currentStep] ? '→ ' + commentLog[currentStep].suppressed_box_ids.length + (algorithm === 'Soft-NMS' ? ' fell below min score' : ' suppressed') : ''">
+                      </span>
+                    </div>
+
+                    <!-- IoU rows + optional inline conf decay (Soft-NMS) -->
+                    <div class="log-iou-scroll">
+                      <template x-for="boxId in (commentLog[currentStep]
+                          ? commentLog[currentStep].compared_box_ids.filter(id => (commentLog[currentStep].iou_scores[String(id)] || 0) > 0)
+                          : [])" :key="boxId">
+                        <div class="log-iou-row"
+                             :class="[commentLog[currentStep].suppressed_box_ids.includes(boxId) ? 'log-suppress' : 'log-keep',
+                                      algorithm === 'Soft-NMS' ? 'log-iou-row-combined' : '']">
+                          <span class="log-box-id" x-text="'#'+boxId"></span>
+                          <div class="log-iou-bar-wrap">
+                            <div class="log-iou-bar"
+                                 :class="commentLog[currentStep].suppressed_box_ids.includes(boxId) ? 'log-iou-bar-suppress' : 'log-iou-bar-keep'"
+                                 :style="'width:'+(commentLog[currentStep].iou_scores[String(boxId)]*100).toFixed(0)+'%'">
+                            </div>
+                          </div>
+                          <span class="log-iou-val"
+                                x-text="(commentLog[currentStep].iou_scores[String(boxId)]*100).toFixed(0)+'%'">
+                          </span>
+                          <!-- Soft-NMS: inline conf decay in the same row -->
+                          <span x-show="algorithm === 'Soft-NMS'"
+                                class="log-conf-inline"
+                                x-text="algorithm === 'Soft-NMS' && weightUpdate(boxId)
+                                  ? weightUpdate(boxId).old_conf.toFixed(3)+' → '+weightUpdate(boxId).new_conf.toFixed(3)
+                                  : ''">
+                          </span>
+                          <span x-show="algorithm === 'Soft-NMS'"
+                                class="log-conf-mult"
+                                x-text="algorithm === 'Soft-NMS' && weightUpdate(boxId)
+                                  ? '×'+weightUpdate(boxId).decay.toFixed(3)
+                                  : ''">
+                          </span>
+                          <span class="log-verdict"
+                                x-text="commentLog[currentStep].suppressed_box_ids.includes(boxId) ? '✕' : (algorithm === 'Soft-NMS' ? '↓' : '✓')">
+                          </span>
+                        </div>
+                      </template>
+
+                      <div class="log-summary-row log-zero-iou"
+                           x-show="commentLog[currentStep] &&
+                             commentLog[currentStep].compared_box_ids.filter(id => (commentLog[currentStep].iou_scores[String(id)] || 0) === 0).length > 0">
+                        <span x-text="commentLog[currentStep]
+                          ? commentLog[currentStep].compared_box_ids.filter(id => (commentLog[currentStep].iou_scores[String(id)] || 0) === 0).length + (algorithm === 'Soft-NMS' ? ' others — no overlap, unchanged' : ' others — no overlap, kept')
+                          : ''">
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div class="list-empty" x-show="steps.length === 0">
+                  Select an image and press ▶ to see the algorithm run.
+                </div>
+              </div>
+            </div>
+        </div>
+
+      </div><!-- /nms-work-area -->
+    </div><!-- /panel-body -->
+
+    <!-- Timeline row -->
+    <div id="timeline-row" x-show="steps.length > 0">
+      <button class="btn btn-icon" id="step-forward-btn"
+              :disabled="steps.length > 0 && currentStep >= steps.length - 1"
+              @click="stepForward()">▶</button>
+      <div id="timeline-track">
+        <template x-for="(_, idx) in steps" :key="idx">
+          <div class="timeline-node"
+               :class="{visited: idx < currentStep, current: idx === currentStep}"
+               :title="'Step '+idx"
+               @click="jumpToStep(idx)"
+               @mouseenter="openPopup(idx)"
+               @mouseleave="closePopup()"></div>
+        </template>
+      </div>
+      <button class="btn btn-icon" id="run-all-btn"
+              :disabled="steps.length > 0 && currentStep >= steps.length - 1"
+              @click="runAll()">⏩</button>
+    </div>
+
+    <!-- ── Step hover preview card ───────────────────────────────────────── -->
+    <div x-show="popupVisible" x-cloak
+         style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+                z-index:500;pointer-events:none;
+                background:#0f172a;border-radius:14px;
+                box-shadow:0 12px 48px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.08);
+                overflow:hidden;display:flex;flex-direction:column;
+                min-width:280px;max-width:480px;">
+
+      <!-- Step badge row -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.08);">
+        <span style="background:var(--clr-pivot);color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:.06em;"
+              x-text="popupInfo ? (popupInfo.stepIndex === 0 ? 'START' : 'S'+popupInfo.stepIndex) : ''"></span>
+        <span style="font-size:11px;font-weight:700;color:#e2e8f0;"
+              x-text="popupInfo && popupInfo.pivot ? 'Pivot #'+popupInfo.pivotId+' · '+popupInfo.pivot.class_name : 'Initial state'"></span>
+        <span style="margin-left:auto;font-size:10px;color:#64748b;" x-text="popupInfo ? popupInfo.nActive+' active' : ''"></span>
+      </div>
+
+      <!-- Image preview -->
+      <img :src="popupDataUrl || ''" x-show="popupDataUrl"
+           style="width:100%;max-height:300px;object-fit:contain;display:block;" />
+
+      <!-- Stat pills -->
+      <div style="display:flex;gap:8px;padding:8px 12px;background:rgba(255,255,255,.04);">
+        <span style="font-size:10px;font-weight:700;color:var(--clr-keep);">
+          ✓ <span x-text="popupInfo ? popupInfo.nKept+' kept' : ''"></span>
+        </span>
+        <span style="font-size:10px;font-weight:700;color:var(--clr-suppress);">
+          ✕ <span x-text="popupInfo ? popupInfo.nSuppressed+' suppressed' : ''"></span>
+        </span>
+        <span style="font-size:10px;color:#64748b;margin-left:auto;">hover to preview</span>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       COLUMN 3 — APmAPPanel
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <section id="apmaps-panel" class="panel" x-data="apPanel()"
+           :class="{greyed: !nmsComplete}">
+
+    <header class="panel-header" id="apmaps-header">
+      <h2>AP / mAP</h2>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <!-- Compare mode toggle -->
+        <template x-if="compareMode">
+          <div style="display:flex;gap:3px;border:1px solid var(--clr-border);border-radius:var(--radius);overflow:hidden;margin-right:4px;">
+            <button style="padding:2px 8px;font-size:11px;font-weight:600;border:none;cursor:pointer;"
+                    :style="compareView==='nms' ? 'background:var(--clr-candidate);color:#fff' : 'background:none;color:var(--clr-text)'"
+                    @click="compareView='nms'">NMS</button>
+            <button style="padding:2px 8px;font-size:11px;font-weight:600;border:none;cursor:pointer;"
+                    :style="compareView==='soft_nms' ? 'background:var(--clr-keep);color:#fff' : 'background:none;color:var(--clr-text)'"
+                    @click="compareView='soft_nms'">Soft-NMS</button>
+          </div>
+        </template>
+        <button class="btn" :class="{active: metricFocus==='AP'}"  @click="metricFocus='AP'">AP</button>
+        <button class="btn" :class="{active: metricFocus==='mAP'}" @click="metricFocus='mAP'">mAP</button>
+        <button class="btn btn-icon" title="Refresh AP / mAP results"
+                :disabled="!nmsComplete || refreshing"
+                @click="refreshAP()"
+                style="margin-left:4px;">
+          <span x-show="!refreshing">↻</span>
+          <span x-show="refreshing" class="spinner" style="width:10px;height:10px;border-width:2px;"></span>
+        </button>
+      </div>
+    </header>
+
+    <div class="panel-body">
+
+      <!-- PR Curve -->
+      <div id="pr-curve-wrap">
+        <canvas id="pr-curve-canvas"></canvas>
+      </div>
+
+      <!-- Class selector -->
+      <div id="class-selector-list">
+        <button class="class-chip" :class="{active: selectedClass === '__all__'}"
+                @click="selectClass('__all__')">All classes</button>
+        <template x-for="cls in classes" :key="cls.name">
+          <button class="class-chip" :class="{active: selectedClass === cls.name}"
+                  @click="selectClass(cls.name)" x-text="cls.name"></button>
+        </template>
+      </div>
+
+      <!-- AP/mAP parameters -->
+      <div id="ap-parameter-controls" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">
+        <div class="param-group">
+          <label>Interpolation points</label>
+          <input type="number" min="1" max="101" step="1"
+                 :value="interpolationPoints"
+                 @change="setInterpolation(+$event.target.value)"
+                 style="width:60px;font-size:12px;padding:2px 6px;border:1px solid var(--clr-border);border-radius:var(--radius);" />
+        </div>
+        <div class="param-group">
+          <label>IoU mode</label>
+          <div style="display:flex;gap:5px;">
+            <button class="btn" :class="{active: iouMode==='single'}" @click="setIouMode('single')" style="padding:3px 7px;">Single</button>
+            <button class="btn" :class="{active: iouMode==='range'}"  @click="setIouMode('range')"  style="padding:3px 7px;">Range</button>
+          </div>
+          <template x-if="iouMode === 'single'">
+            <div style="margin-top:4px;">
+              <span class="param-value" x-text="apIouValue.toFixed(2)"></span>
+              <input type="range" min="0.05" max="0.95" step="0.05"
+                     :value="apIouValue"
+                     @input="setApIouValue(+$event.target.value)"
+                     style="width:100px;" />
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Summary results — switches between NMS/Soft-NMS in compare mode -->
+      <div id="summary-results">
+        <div class="metric-block">
+          <span class="metric-label">AP <span style="font-weight:400;text-transform:none;"
+            x-text="selectedClass === '__all__' ? '(macro)' : '(' + selectedClass + ')'"></span></span>
+          <span class="metric-value"
+            x-text="(compareMode ? (compareView==='nms' ? apValue : apValueSoft) : apValue) !== null
+              ? (compareMode ? (compareView==='nms' ? apValue : apValueSoft) : apValue).toFixed(3) : '—'">
+          </span>
+        </div>
+        <div class="metric-block">
+          <span class="metric-label">mAP</span>
+          <span class="metric-value"
+            x-text="(compareMode ? (compareView==='nms' ? mapValue : mapValueSoft) : mapValue) !== null
+              ? (compareMode ? (compareView==='nms' ? mapValue : mapValueSoft) : mapValue).toFixed(3) : '—'">
+          </span>
+        </div>
+      </div>
+
+      <!-- mAP breakdown — visible only when mAP button is active -->
+      <div class="map-breakdown"
+           x-show="metricFocus === 'mAP' && (compareMode ? (compareView==='nms' ? classes.length : classesSoft.length) : classes.length) > 0">
+        <div class="map-breakdown-header">
+          <span>How mAP is calculated</span>
+        </div>
+
+        <!-- Formula row -->
+        <div class="map-formula">
+          <span class="map-formula-label">mAP</span>
+          <span class="map-formula-eq">=</span>
+          <span class="map-formula-expr">
+            (<template x-for="(cls, i) in (compareMode && compareView==='soft_nms' ? classesSoft : classes)" :key="cls.name">
+              <span>
+                <span class="map-cls-name" x-text="cls.name"></span>
+                <template x-if="i < classes.length - 1"><span class="map-plus"> + </span></template>
+              </span>
+            </template>)
+            <span class="map-divider"> ÷ <span x-text="classes.length"></span></span>
+          </span>
+        </div>
+
+        <!-- Per-class AP rows -->
+        <div class="map-class-list">
+          <template x-for="cls in [...(compareMode && compareView==='soft_nms' ? classesSoft : classes)].sort((a,b) => b.ap - a.ap)" :key="cls.name">
+            <div class="map-class-row">
+              <span class="map-cls-tag" x-text="cls.name"></span>
+              <div class="map-ap-bar-wrap">
+                <div class="map-ap-bar" :style="'width:'+(cls.ap*100).toFixed(0)+'%'"></div>
+              </div>
+              <span class="map-ap-val" x-text="cls.ap.toFixed(3)"
+                    :style="cls.ap === 0 ? 'color:var(--clr-suppress)' : cls.ap >= 0.9 ? 'color:var(--clr-keep)' : ''">
+              </span>
+            </div>
+          </template>
+
+          <!-- Divider + result -->
+          <div class="map-result-row">
+            <span style="color:var(--clr-text-muted);font-size:10px;"
+                  x-text="'mean of '+(compareMode && compareView==='soft_nms' ? classesSoft.length : classes.length)+' classes'"></span>
+            <span class="map-result-val"
+                  x-text="(compareMode && compareView==='soft_nms' ? mapValueSoft : mapValue) !== null
+                    ? (compareMode && compareView==='soft_nms' ? mapValueSoft : mapValue).toFixed(3) : '—'"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kept detections: TP / FP -->
+      <div style="flex-shrink:0;">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--clr-text-muted);margin-bottom:4px;">
+          Dataset Labels
+          <span style="font-weight:400;text-transform:none;"
+                x-text="(compareMode && compareView==='soft_nms' ? keptBoxesListSoft : keptBoxesList)
+                  .filter(b => selectedClass === '__all__' || b.class_name === selectedClass).length
+                  ? '(' + (compareMode && compareView==='soft_nms' ? keptBoxesListSoft : keptBoxesList)
+                      .filter(b => selectedClass === '__all__' || b.class_name === selectedClass).length + ' kept)'
+                  : ''">
+          </span>
+        </h3>
+        <div class="box-list" style="max-height:220px;overflow-y:auto;">
+
+          <!-- Kept boxes — shown as soon as NMS completes -->
+          <template x-if="(compareMode && compareView==='soft_nms' ? keptBoxesListSoft : keptBoxesList).length > 0">
+            <div>
+              <div class="box-list-header" style="display:grid;grid-template-columns:24px 1fr auto auto auto;gap:4px;">
+                <span>#</span><span>Class</span><span>Conf</span><span>IoU</span><span>Label</span>
+              </div>
+              <template x-for="box in (compareMode && compareView==='soft_nms' ? keptBoxesListSoft : keptBoxesList).filter(b => selectedClass === '__all__' || b.class_name === selectedClass)" :key="box.id">
+                <div class="box-list-item"
+                     style="display:grid;grid-template-columns:24px 1fr auto auto auto;gap:4px;align-items:center;">
+                  <span class="box-id"
+                        :style="(compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]
+                          ? ((compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id].is_tp ? 'color:var(--clr-keep)' : 'color:var(--clr-suppress)')
+                          : 'color:var(--clr-candidate)'"
+                        x-text="'#'+box.id"></span>
+                  <span class="box-class" x-text="box.class_name" :title="box.class_name"></span>
+                  <span class="box-conf" x-text="box.confidence.toFixed(2)"></span>
+                  <span style="font-size:10px;font-variant-numeric:tabular-nums;font-weight:600;"
+                        :style="(compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]?.is_tp
+                          ? 'color:var(--clr-keep)'
+                          : (compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]?.gt_taken
+                            ? 'color:#d97706'
+                            : 'color:var(--clr-text-muted)'"
+                        x-text="(compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]?.iou > 0
+                          ? (((compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id].iou)*100).toFixed(0)+'%'
+                          : '—'"></span>
+                  <span x-show="(compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]"
+                        style="font-size:9px;font-weight:800;padding:1px 5px;border-radius:3px;text-align:center;white-space:nowrap;"
+                        :style="(compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]?.is_tp
+                          ? 'background:rgba(22,163,74,0.15);color:var(--clr-keep)'
+                          : (compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]?.gt_taken
+                            ? 'background:rgba(217,119,6,0.15);color:#d97706'
+                            : 'background:rgba(220,38,38,0.12);color:var(--clr-suppress)'"
+                        x-text="(compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]?.is_tp
+                          ? 'TP'
+                          : (compareMode && compareView==='soft_nms' ? matchByPredIdSoft : matchByPredId)[box.id]?.gt_taken
+                            ? 'Taken'
+                            : 'FP'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- Empty state before NMS runs -->
+          <template x-if="(compareMode && compareView==='soft_nms' ? keptBoxesListSoft : keptBoxesList).length === 0">
+            <div class="list-empty">Run NMS to completion to see kept detections.</div>
+          </template>
+
+        </div>
+      </div>
+
+      <!-- Missed GT boxes (false negatives) -->
+      <div style="flex-shrink:0;"
+           x-show="(compareMode && compareView==='soft_nms' ? falseNegativesSoft : falseNegatives)
+             .filter(b => selectedClass === '__all__' || b.class_name === selectedClass).length > 0">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--clr-suppress);margin-bottom:4px;">
+          Not in Labels
+          <span style="font-weight:400;text-transform:none;color:var(--clr-text-muted);"
+                x-text="'(' + (compareMode && compareView==='soft_nms' ? falseNegativesSoft : falseNegatives)
+                  .filter(b => selectedClass === '__all__' || b.class_name === selectedClass).length + ' missed GT)'">
+          </span>
+        </h3>
+        <div class="box-list" style="max-height:140px;overflow-y:auto;border-color:rgba(220,38,38,0.3);">
+          <div class="box-list-header" style="color:var(--clr-suppress);background:rgba(220,38,38,0.07);
+               display:grid;grid-template-columns:24px 1fr auto auto;gap:4px;">
+            <span>#</span><span>Class</span><span>Best IoU</span><span>Status</span>
+          </div>
+          <template x-for="box in (compareMode && compareView==='soft_nms' ? falseNegativesSoft : falseNegatives).filter(b => selectedClass === '__all__' || b.class_name === selectedClass)" :key="box.gt_id">
+            <div class="box-list-item" style="display:grid;grid-template-columns:24px 1fr auto auto;gap:4px;align-items:center;">
+              <span class="box-id" style="color:var(--clr-suppress);" x-text="'#'+box.gt_id"></span>
+              <span class="box-class" x-text="box.class_name" :title="box.class_name"></span>
+              <span style="font-size:10px;font-variant-numeric:tabular-nums;color:var(--clr-text-muted);"
+                    x-text="box.best_iou > 0 ? (box.best_iou*100).toFixed(0)+'%' : '—'"></span>
+              <span class="not-detected-badge">Missed</span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Interim steps table -->
+      <div style="flex:1;overflow-y:auto;border:1px solid var(--clr-border);border-radius:var(--radius);">
+        <table id="interim-steps-table">
+          <thead>
+            <tr><th>Conf. Threshold</th><th>Recall</th><th>Precision</th></tr>
+          </thead>
+          <tbody>
+            <template x-for="(row, i) in interimTable" :key="i">
+              <tr>
+                <td x-text="row.conf_threshold.toFixed(3)"></td>
+                <td x-text="row.recall.toFixed(3)"></td>
+                <td x-text="row.precision.toFixed(3)"></td>
+              </tr>
+            </template>
+            <tr x-show="interimTable.length === 0">
+              <td colspan="3" class="list-empty">Run NMS to completion first.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /panel-body -->
+  </section>
+
+</div><!-- /app-layout -->
+
+<!-- ── JS modules ─────────────────────────────────────────────────────────── -->
+<script src="/static/js/vendor/chart.umd.min.js?v=18"></script>
+<script src="/static/js/api.js?v=18"></script>
+<script src="/static/js/canvas.js?v=18"></script>
+<script src="/static/js/state.js?v=18"></script>
+<script src="/static/js/configurator.js?v=18"></script>
+<script src="/static/js/nms_panel.js?v=18"></script>
+<script src="/static/js/metrics_panel.js?v=18"></script>
+
+</body>
+</html>

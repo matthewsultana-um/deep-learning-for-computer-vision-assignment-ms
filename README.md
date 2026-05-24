@@ -2,7 +2,7 @@
 
 This GitHub repository hosts the code and documents related to the Deep Learning for Computer Vision Assignment.
 
-**Repository Link:** [https://github.com/matthewsultana-um/deep-learning-for-computer-vision-assignment-ms/tree/main](https://github.com/matthewsultana-um/deep-learning-for-computer-vision-assignment-ms/tree/main)
+**Repository Link:** [https://github.com/matthewsultana-um/deep-learning-for-computer-vision-assignment-ms/tree/main](https://github.com/matthewsultana-um/deep-learning-for-computer-vision-assignment-ms)
 **Quiz Link:** [here](https://docs.google.com/forms/d/e/1FAIpQLSfyvSdnDKwu0dCFBvbAi4C78e9BdVWNgvqa4GHU2qIa-UiOow/viewform?usp=dialog)
 **Hugging Face Spaces:** (https://huggingface.co/spaces/mattsult-um/ari5118)
 
